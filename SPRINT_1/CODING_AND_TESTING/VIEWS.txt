@@ -1,0 +1,691 @@
+								VIEWS.PY
+
+from django.http import HttpResponse,HttpResponseRedirect
+from django.shortcuts import render
+from datetime import date
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
+import pymysql
+from django.core.files.storage import FileSystemStorage
+
+con=pymysql.connect("localhost","root","","libero_sng")
+c=con.cursor()
+def login(request):
+    alert =""
+    try:
+        if(request.POST):
+            uname=request.POST.get("uname")
+            pswd=request.POST.get("pswd")       
+            status="approved"
+            v="select role from tbl_login where id='"+str(uname)+"' and pswd='"+str(pswd)+"' and status='"+str(status)+"'"
+            c.execute(v)
+            da=c.fetchone()
+            print(v)
+            request.session["uaid"]=uname
+            if da[0]=="admin":
+                return HttpResponseRedirect("/adminpagedemo/")
+            elif da[0]=="student":
+                c.execute("select sname from tbl_sreg where sroll='"+str(uname)+"'")
+                cc=c.fetchone()
+                request.session["una"]=cc[0]  
+                toda=date.today()  
+                gg="select returndate,status from tbl_circulation where uid='"+str(uname)+"'"
+                r=c.execute(gg)
+                print(gg)
+                if r > 0:
+
+                    ch=c.fetchall()
+                    d1=ch[0][0]
+                    
+
+                    if ch[0][1]=="issued" and toda>d1:
+                        cd=toda[9:11]
+                        rd=d1[9:11]
+                        lk=cd-rd
+                        gf=lk*1
+                        we="update tbl_circulation set fine='"+str(gf)+"' where uid='"+str(uname)+"'"
+                        c.execute(we)
+                        con.commit()
+                return HttpResponseRedirect("/studentpage/")
+            elif da[0]=="teacher":
+                c.execute("select fid from tbl_freg where fname='"+str(uname)+"' and pswd='"+str(pswd)+"'")
+                g=c.fetchone()
+                fid=g[0]
+                request.session["fid"]=fid
+                request.session["fna"]=uname
+                return HttpResponseRedirect("/facultypage/")
+            elif da[0]=="vendor":
+                
+                request.session["vna"]=uname 
+                return HttpResponseRedirect("/vendorpage/")
+    except:
+        alert="Invalid Username or password"
+    return render(request,"login.html",{"alert":alert})   
+    
+def facultypage(request):
+    return render(request,'facultypage.html')
+def studentpage(request):
+    return render(request,'studentpage.html')
+def vendorpage(request):
+    return render(request,'vendorpage.html')
+def adminpage(request):
+    return render(request,'adminpage.html')
+def adminpagedemo(request):
+    return render(request,'adminpagedemo.html')
+def adminviewallbookings(request):
+    st="booked"
+    t=" select c.cid,c.uid,c.uname,c.bookingdate,c.issuedate,c.returndate,c.status,b.title,b.type,b.author,b.publisher,b.noofcopies from  tbl_circulation as c inner join tbl_bookdlts as b on c.bid=b.bookid where status='"+str(st)+"'"
+    c.execute(t)
+    data=c.fetchall()
+    print(t)
+    return render(request,'adminviewallbookings.html',{'data':data})
+def adminviewallquotations(request):
+    st="booked"
+    t=" select c.cid,c.uid,c.uname,c.bookingdate,c.issuedate,c.returndate,c.status,b.title,b.type,b.author,b.publisher,b.noofcopies from  tbl_circulation as c inner join tbl_bookdlts as b on c.bid=b.bookid where status='"+str(st)+"'"
+    c.execute(t)
+    data=c.fetchall()
+    print(t)
+    return render(request,'adminviewallbookings.html',{'data':data})
+def adminviewquotationsbyvendor(request):
+    st="booked"
+    t=" select * from vendorgivequotation"
+    c.execute(t)
+    data=c.fetchall()
+    amt=data[0][9]
+    request.session["amt"]=amt
+    print(t)
+    return render(request,'adminviewallquotations.html',{'data':data})
+def adminapprovequotation(request):
+    rid=request.GET.get("uid")
+    t="select * from tbl_facultybreq where rid='"+str(rid)+"'"
+    c.execute(t)
+    data=c.fetchall()
+    if(request.POST):
+       
+        date1=request.POST.get("date1")
+            
+        author=request.POST.get("author")
+        title=request.POST.get("title")
+        pub=request.POST.get("publisher")
+        copies=request.POST.get("noofcopies")
+        amt=request.POST.get("amt")
+        st="not received"
+        p="insert into adminquotation(date,author,title,publisher,nocopys,amt,status) values('"+str(date1)+"','"+str(author)+"','"+str(title)+"','"+str(pub)+"','"+str(copies)+"','"+str(amt)+"','"+str(st)+"')"
+        c.execute(p)
+        con.commit()
+        sta="forwarded"
+        pu="update tbl_facultybreq set status='"+str(sta)+"' where rid='"+str(rid)+"'"
+        c.execute(pu)
+        con.commit()
+        print(p)
+        data=''
+   
+        stat="not forwarded"
+        c.execute("SELECT * from `tbl_facultybreq` where status='"+str(stat)+"'")
+    
+        data=c.fetchall()  
+        return render(request,'viewquatation.html',{'data':data})
+
+    return render(request,'preparequatation.html',{'data':data})
+def vendorviewquotations(request):
+    sta="not received"
+    u="select * from adminquotation where status='"+str(sta)+"'"
+    c.execute(u)
+    data=c.fetchall()
+    return render(request,'vendorviewquotationsbyadmin.html',{'data':data})
+def vendorgivequotation(request):
+    rid=request.GET.get("uid")
+    t="select * from adminquotation where qid='"+str(rid)+"'"
+    c.execute(t)
+    data=c.fetchall()
+    if(request.POST):
+        vn=request.session["vna"]
+        re="select * from tbl_vendor where vname='"+str(vn)+"'"
+        c.execute(re)
+        fd=c.fetchall()
+        store=fd[0][2]
+        ph=fd[0][3]
+        em=fd[0][4]
+        author=request.POST.get("author")
+        title=request.POST.get("title")
+        pub=request.POST.get("publisher")
+        copies=request.POST.get("noofcopies")
+        amt=request.POST.get("amt")
+        st="pending"
+        p="insert into vendorgivequotation(quotationid,vname,storename,phno,email,author,title,publisher,nocopys,amt,status) values('"+str(rid)+"','"+str(vn)+"','"+str(store)+"','"+str(ph)+"','"+str(em)+"','"+str(author)+"','"+str(title)+"','"+str(pub)+"','"+str(copies)+"','"+str(amt)+"','"+str(st)+"')"
+        c.execute(p)
+        con.commit()
+        return render(request,'vendorviewquotationsbyadmin.html')
+    return render(request,'vendorgivequotation.html',{'data':data})
+
+def issueupdateforrenewal(request):
+    rid=request.GET.get("cid")
+    g="select returndate from tbl_circulation where cid='"+str(rid)+"'"
+    c.execute(g)
+    ds=c.fetchone()
+    tr=ds[0]
+    sta="Renewed"
+    
+    date_after_month = tr+ relativedelta(days=14)
+    datetime.today().strftime('%d/%m/%Y')
+    s=date_after_month.strftime('%Y-%m-%d')
+    l="update tbl_circulation set status='"+str(sta)+"',returndate='"+str(s)+"' where cid='"+str(rid)+"'"
+    c.execute(l)
+    con.commit()
+    print(l)
+    return render(request,'adminviewissuedbooks.html')
+def issueupdateforreturn(request):
+    rid=request.GET.get("cid")
+    
+    sta="Returned"
+    
+    b="0"
+    l="update tbl_circulation set status='"+str(sta)+"',cnt='"+str(b)+"' where cid='"+str(rid)+"'"
+    c.execute(l)
+    con.commit()
+    print(l)
+    return render(request,'adminviewissuedbooks.html')
+def bookingupdate(request):
+    rid=request.GET.get("cid")
+    sta="issued"
+    da=date.today()
+    date_after_month = datetime.today()+ relativedelta(days=14)
+    datetime.today().strftime('%d/%m/%Y')
+    s=date_after_month.strftime('%Y-%m-%d')
+   
+    l="update tbl_circulation set status='"+str(sta)+"',issuedate='"+str(da)+"',returndate='"+str(s)+"' where cid='"+str(rid)+"'"
+    c.execute(l)
+    con.commit()
+    print(l)
+    return render(request,'adminviewallbookings.html')
+def adminviewissued(request):
+    st="issued"
+    t=" select c.cid,c.uid,c.uname,c.bookingdate,c.issuedate,c.returndate,c.status,b.title,b.type,b.author,b.publisher,b.noofcopies from  tbl_circulation as c inner join tbl_bookdlts as b  on c.bid=b.bookid where status='"+str(st)+"'"
+    c.execute(t)
+    data=c.fetchall()
+    
+    return render(request,'adminviewissuedbooks.html',{'data':data})
+def sreg(request):
+    if(request.POST):
+        sname=request.POST.get("sname")
+        address=request.POST.get("address")
+        sroll=request.POST.get("sroll")
+        dpt=request.POST.get("Dpt")
+        dob=request.POST.get("dob")
+        pswd=request.POST.get("pswd")
+        cpswd=request.POST.get("cpswd")
+        status="pending"
+        role="student"
+        phno=request.POST.get("phno")  
+        if cpswd==pswd:          
+            qry="insert into tbl_sreg(sname,sroll,dpt,address,dob,pswd,status,phno) values('"+str(sname)+"','"+str(sroll)+"','"+str(dpt)+"','"+str(address)+"','"+str(dob)+"','"+str(pswd)+"','"+str(status)+"','"+str(phno)+"')"      
+            qry2="insert into tbl_login(id,pswd,status,role) values('"+sroll+"','"+pswd+"','"+status+"','"+role+"')"
+            c.execute(qry)
+            c.execute(qry2)
+            con.commit() 
+            print(qry)
+    return render(request,'s_reg.html')
+    
+def freg(request):
+    if(request.POST):
+        
+        fname=request.POST.get("fname")
+        dpt=request.POST.get("Dpt")
+        subject=request.POST.get("subject")
+        pswd=request.POST.get("pswd")
+        cpswd=request.POST.get("cpswd")
+        dob=request.POST.get("dob")
+        phno=request.POST.get("phno")  
+        status="pending"
+        if cpswd==pswd:          
+            qry="insert into tbl_freg(fname,dpt,subject,pswd,status,dob,phno) values('"+str(fname)+"','"+str(dpt)+"','"+str(subject)+"','"+str(pswd)+"','"+str(status)+"','"+str(dob)+"','"+str(phno)+"')"        
+            qry2="insert into tbl_login(id,pswd,status,role) values('"+fname+"','"+pswd+"','"+status+"','teacher')"
+            c.execute(qry)
+            c.execute(qry2)
+            con.commit() 
+        print(qry)
+    return render(request,'f_reg.html')  
+def vreg(request):
+    if(request.POST):
+        vname=request.POST.get("vname")
+        vaddress=request.POST.get("vaddress")
+        phno=request.POST.get("phno")
+        emailid=request.POST.get("emailid")
+        pswd=request.POST.get("pswd")
+        cpswd=request.POST.get("cpswd")  
+        status=request.POST.get("acno")
+        rol="vendor"
+        sta="approved"     
+        qry="insert into tbl_vendor(vname,storename,phnno,email,acno,password) values('"+str(vname)+"','"+str(vaddress)+"','"+str(phno)+"','"+str(emailid)+"','"+str(status)+"','"+str(pswd)+"')"    
+        qry2="insert into tbl_login(id,pswd,role,status) values('"+str(vname)+"','"+str(pswd)+"','"+str(rol)+"','"+str(sta)+"')"
+        c.execute(qry)
+        c.execute(qry2)
+        con.commit()
+        print(qry)  
+        
+    return render(request,'vendor.html')
+def eventnoti(request):
+    if(request.POST):
+        eventname=request.POST.get("event")
+        eventtime=request.POST.get("etime")
+        venue=request.POST.get("venue")   
+        duration=request.POST.get("duration")
+        date=request.POST.get("date")
+        print(eventtime)
+        qry="insert into tbl_event (eventname,eventtime,venue,duration,date) values('"+str(eventname)+"','"+str(eventtime)+"','"+str(venue)+"','"+str(duration)+"','"+str(date)+"')"
+        c.execute(qry)
+        con.commit()
+    return render(request,'eventnotifi.html')
+def bookdetails(request):
+    if(request.POST):
+        bid=request.POST.get("bid")
+        booktitle=request.POST.get("booktitle")
+        btype=request.POST.get("btype")
+        author=request.POST.get("author")
+        publisher=request.POST.get("publisher")
+        bookstatus="available"
+        noofcopies=request.POST.get("noofcopies")
+        qry="insert into tbl_bookdlts(bookid,title,type,author,publisher,bookstatus,noofcopies) values('"+str(bid)+"','"+str(booktitle)+"','"+str(btype)+"','"+str(author)+"','"+str(publisher)+"','"+str(bookstatus)+"','"+str(noofcopies)+"')"
+        c.execute(qry)
+        con.commit()
+    return render(request,'bookdtls.html')
+def circulation(request):
+    if(request.POST):
+        
+        uid=request.POST.get("uid")
+        bid=request.POST.get("bid")
+        issue=request.POST.get("issue")
+        renew=request.POST.get("renew")
+        breturn=request.POST.get("breturn")
+        fine=request.POST.get("fine")
+        qry="insert into tbl_circulation(cid,uid,bid,issue,renew,return,fine) values('"+str(cid)+"','"+str(uid)+"','"+str(bid)+"','"+str(issue)+"','"+str(renew)+"','"+str(breturn)+"','"+str(fine)+"')"
+        c.execute(qry)
+        con.commit()
+    return render(request,'circulation.html')
+def preparequatation(request):
+    rid=request.GET.get("uid")
+    s="select * from `tbl_facultybreq` where rid='"+str(rid)+"'"
+    c.execute(s)
+    print(s)
+    data=c.fetchall()
+    if(request.POST):
+         
+        noofcopies=request.POST.get("noofcopies")
+        amt=request.POST.get("amt")
+        today = date.today()
+        status="pending"
+        qry="insert into `tbl_quat` (`rno`,`noc`,`amount`,`date`,`status`) values('"+str(rid)+"','"+str(noofcopies)+"','"+str(amt)+"','"+str(today)+"','"+str(status)+"')"
+        c.execute(qry)
+        con.commit()
+    return render(request,'preparequatation.html',{"data":data})
+def facultybookrequest(request):
+    if(request.POST):
+        rid=request.POST.get("rid")
+        date=request.POST.get("date")
+        dept=request.POST.get("dept")
+        fname=request.POST.get("fname")
+        author=request.POST.get("author")
+        title=request.POST.get("title")
+        publisher=request.POST.get("publisher")
+        noofcopies=request.POST.get("noofcopies")
+        status="not forwarded"
+        qry="insert into tbl_facultybreq(date,dept,fname,author,title,publisher,nocopys,status) values('"+str(date)+"','"+str(dept)+"','"+str(fname)+"','"+str(author)+"','"+str(title)+"','"+str(publisher)+"','"+str(noofcopies)+"','"+str(status)+"')"
+        c.execute(qry)
+        con.commit()
+    return render(request,'facultybrqst.html')
+
+def viewquatation(request):
+    data=''
+   
+    stat="not forwarded"
+    c.execute("SELECT * from `tbl_facultybreq` where status='"+str(stat)+"'")
+    # elif stype=='Faculty':
+    #     c.execute("SELECT reg.*,log.uname from tbl_freg reg join tbl_login log  on log.uname=reg.fname")
+    # else:
+    #     return HttpResponseRedirect('/viewusers/')
+    data=c.fetchall()   
+    
+
+     
+    return render(request,'viewquatation.html',{'data':data})
+
+    
+def viewbookbyadmin(request):
+    
+   
+    
+    c.execute("select * from `tbl_bookdlts`")
+    # elif stype=='Faculty':
+    #     c.execute("SELECT reg.*,log.uname from tbl_freg reg join tbl_login log  on log.uname=reg.fname")
+    # else:
+    #     return HttpResponseRedirect('/viewusers/')
+    data=c.fetchall()   
+    
+
+     
+    return render(request,'viewbookbyadmin.html',{'data':data})
+def viewbookbyuser(request):
+    if request.POST:
+   
+        title=request.POST.get("t1")
+        c.execute("select count(*) from `tbl_bookdlts` where title like'%"+str(title)+"%'")
+        # elif stype=='Faculty':
+        #     c.execute("SELECT reg.*,log.uname from tbl_freg reg join tbl_login log  on log.uname=reg.fname")
+        # else:
+        #     return HttpResponseRedirect('/viewusers/')
+        data=c.fetchone()   
+        if data[0]>0:
+            count=1
+            c.execute("select * from `tbl_bookdlts` where title like'%"+str(title)+"%'")
+        
+            data=c.fetchall()   
+            return render(request,'viewbookbystudent.html',{'count':count,'data':data})
+            
+        else:
+            count=0
+            return render(request,'viewbookbystudent.html',{'count':count}) 
+    return render(request,'viewbookbystudent.html') 
+def viewbookbyteacher(request):
+    
+   
+    title=request.POST.get("t1")
+    c.execute("select * from `tbl_bookdlts` where title like'%"+str(title)+"%'")
+    # elif stype=='Faculty':
+    #     c.execute("SELECT reg.*,log.uname from tbl_freg reg join tbl_login log  on log.uname=reg.fname")
+    # else:
+    #     return HttpResponseRedirect('/viewusers/')
+    data=c.fetchall()   
+    
+
+     
+    return render(request,'viewbookbyteacher.html',{'data':data})
+def viewusers(request):
+    data=''
+    st="pending"
+    
+    c.execute("SELECT reg.sname,reg.sroll,reg.dpt,reg.address,reg.dob,reg.phno,log.id from tbl_sreg reg join tbl_login log  on log.id=reg.sroll where log.status='"+str(st)+"'")
+    # elif stype=='Faculty':
+    #     c.execute("SELECT reg.*,log.uname from tbl_freg reg join tbl_login log  on log.uname=reg.fname")
+    # else:
+    #     return HttpResponseRedirect('/viewusers/')
+    data=c.fetchall()   
+    
+
+         
+    return render(request,'viewregusers.html',{'data':data})
+def viewevent(request):
+    data=''
+   
+    
+    c.execute("SELECT * from tbl_event")
+    # elif stype=='Faculty':
+    #     c.execute("SELECT reg.*,log.uname from tbl_freg reg join tbl_login log  on log.uname=reg.fname")
+    # else:
+    #     return HttpResponseRedirect('/viewusers/')
+    data=c.fetchall()   
+    
+
+     
+    return render(request,'viewevent.html',{'data':data})
+def viewbookrequest(request):
+    data=''
+   
+    
+    c.execute("SELECT * from `tbl_facultybreq`")
+    # elif stype=='Faculty':
+    #     c.execute("SELECT reg.*,log.uname from tbl_freg reg join tbl_login log  on log.uname=reg.fname")
+    # else:
+    #     return HttpResponseRedirect('/viewusers/')
+    data=c.fetchall()   
+    
+
+     
+    return render(request,'viewrequest.html',{'data':data})
+def viewbookrequestbyvender(request):
+    data=''
+   
+    sta="not received"
+    c.execute("SELECT * from `adminquotation` where status='"+str(sta)+"'")
+    # elif stype=='Faculty':
+    #     c.execute("SELECT reg.*,log.uname from tbl_freg reg join tbl_login log  on log.uname=reg.fname")
+    # else:
+    #     return HttpResponseRedirect('/viewusers/')
+    data=c.fetchall()   
+    
+
+     
+    return render(request,'viewrequestbyvender.html',{'data':data})
+
+def viewfaculty(request):
+    data=''
+   
+    sta="pending"
+    c.execute("SELECT * from tbl_freg where status='"+str(sta)+"'")
+    # elif stype=='Faculty':
+    #     c.execute("SELECT reg.*,log.uname from tbl_freg reg join tbl_login log  on log.uname=reg.fname")
+    # else:
+    #     return HttpResponseRedirect('/viewusers/')
+    data=c.fetchall()   
+    
+
+     
+    return render(request,'viewfaculity.html',{'data':data})
+
+# def approvestudent(request):
+#     sid=request.GET.get("uid")
+   
+#     s="insert into tbl_login(sname,pswd,status) values('"+sname+"','"+pswd+"','"+status+"')"
+#     c.execute(s)
+#     con.commit()
+#     return HttpResponseRedirect("/viewusers")
+def approvefaculty(request):
+
+    fid=request.GET.get("uid")
+    status="approved"
+    s="update tbl_login set status='"+str(status)+"' where id='"+str(fid)+"'"
+    c.execute(s)
+    con.commit()
+    rs="update tbl_freg set status='"+str(status)+"' where fname='"+str(fid)+"'"
+    c.execute(rs)
+    con.commit()
+    print(s)
+    #return HttpResponseRedirect("/viewfaculty")
+    sta="pending"
+    c.execute("SELECT * from tbl_freg where status='"+str(sta)+"'")
+    
+    data=c.fetchall()  
+    return render(request,'viewfaculity.html',{'data':data})
+
+def rejectstudent(request):
+    sid=request.GET.get("sid")
+    s="delete from tbl_sreg where sid='"+sid+"'"
+    c.execute(s)
+    con.commit()
+    return HttpResponseRedirect("/viewusers")
+def rejectfaculty(request):
+    fid=request.GET.get("fid")
+    s="delete from tbl_freg where fid='"+fid+"'"
+    c.execute(s)
+    con.commit()
+    return HttpResponseRedirect("/viewusers/")
+def adminview(request):
+    
+    return HttpResponseRedirect("/adminpage")
+
+def Viewmoredetails(request):
+    bid=request.GET.get('id')
+    c.execute("select * from tbl_bookdlts where bookid='"+str(bid)+"'")
+    print("select * from tbl_bookdlts where bookid='"+str(bid)+"'")
+    js=c.fetchall()
+    tot=js[0][6]
+    c.execute("select sum(cnt) as cnt from tbl_circulation where bid='"+str(bid)+"'")
+    gf=c.fetchone()
+    b=gf[0]
+    
+    if b==None:
+        b=0
+        avail=tot-b
+        return render(request,'viewmoredetails.html',{'data':js,'avail':avail})
+    
+    avail=tot-b
+    return render(request,'viewmoredetails.html',{'data':js,'avail':avail})
+def Viewmoredetailsfac(request):
+    bid=request.GET.get('id')
+    c.execute("select * from tbl_bookdlts where bookid='"+str(bid)+"'")
+    print("select * from tbl_bookdlts where bookid='"+str(bid)+"'")
+    js=c.fetchall()
+    tot=js[0][6]
+    c.execute("select sum(cnt) as cnt from tbl_circulation where bid='"+str(bid)+"'")
+    gf=c.fetchone()
+    b=gf[0]
+    
+    if b==None:
+        b=0
+        avail=tot-b
+        return render(request,'viewmoredetailsfac.html',{'data':js,'avail':avail})
+    
+    avail=tot-b
+    return render(request,'viewmoredetailsfac.html',{'data':js,'avail':avail})
+
+def booking(request):
+    bid=request.GET.get('id')
+    status="booked"
+    tdate=date.today() 
+    uid=request.session["uaid"]
+    unam=request.session["una"]
+    #dt = strtotime(tdate)
+    cn="1"
+    c.execute("insert into tbl_circulation(uid,uname,bid,bookingdate,issuedate,returndate,cnt,status) values('"+str(uid)+"','"+str(unam)+"','"+str(bid)+"','"+str(tdate)+"','"+str(0000-00-00)+"','"+str(0000-00-00)+"','"+str(cn)+"','"+str(status)+"')")
+    con.commit()
+    print("haiiii")
+    return render(request,'studentpage.html')
+def bookingfac(request):
+
+    bid=request.GET.get('id')
+    status="booked"
+    tdate=date.today() 
+    uid=request.session["fid"]
+    
+    una=request.session["fna"]
+    #dt = strtotime(tdate)
+    cn="1"
+    c.execute("insert into tbl_circulation(uid,uname,bid,bookingdate,issuedate,returndate,cnt,status) values('"+str(una)+"','"+str(una)+"','"+str(bid)+"','"+str(tdate)+"','"+str(0000-00-00)+"','"+str(0000-00-00)+"','"+str(cn)+"','"+str(status)+"')")
+    con.commit()
+    print("haiiii")
+    return render(request,'facultypage.html')
+def approveusers(request):
+    uid=request.GET.get('uid')
+    c.execute("update tbl_login set status='approved' where id='"+uid+"'")
+    con.commit()
+    print("update tbl_login set status='approved' where id='"+uid+"'")
+    return HttpResponseRedirect('/viewusers/')
+#def approvefaculty(request):
+ #   uid=request.GET.get('uid')
+  #  c.execute("update tbl_login set status='Approved' where id='"+uid+"'")
+   # con.commit()
+    
+    #return HttpResponseRedirect('/viewusers/')
+
+def rejectuser(request):
+    uid=request.GET.get('uid')#sid
+    c.execute("delete from tbl_login  where id='"+uid+"'")
+    con.commit()
+    c.execute("delete from tbl_sreg  where sroll='"+uid+"'")
+    con.commit()
+    return HttpResponseRedirect('/viewusers/')
+
+def rejectfaculty(request):
+    uid=request.GET.get('uid')#sid
+    c.execute("delete from tbl_login  where id='"+uid+"'")
+    con.commit()
+    c.execute("delete from tbl_freg where fname='"+uid+"'")
+    con.commit()
+    return HttpResponseRedirect('/viewusers/')
+
+def deletebook(request):
+    id=request.GET.get('id')
+    c.execute("delete from `tbl_bookdlts`  where bookid='"+str(id)+"'")
+    con.commit()
+   
+    return HttpResponseRedirect('/viewbookbyadmin/')
+def payment1(request):
+    id=request.GET.get('cid')
+    we="select * from vendorgivequotation where qid='"+str(id)+"'"
+    c.execute(we)
+    tr=c.fetchall()
+
+    if request.POST:
+        request.session["qid"]=id
+        card=request.POST.get("test")
+        cardno=request.POST.get("cardno")
+        request.session["card_no"]=cardno
+        pinno=request.POST.get("pinno")
+        return HttpResponseRedirect("/payment2")
+    return render(request,"payment1.html")
+
+def payment2(request):
+    cno=request.session["card_no"]
+   # amount=request.session["pay"]
+    amount=request.session["amt"]
+    if request.POST:
+        id=request.session["qid"]
+        name=request.POST.get("t1")
+        request.session["m"]=name
+        address=request.POST.get("t2")
+        email=request.POST.get("t3")
+        phno=request.POST.get("t4")
+        st="received"
+        lp="update  vendorgivequotation set status='"+str(st)+"' where qid='"+str(id)+"'"
+        c.execute(lp)
+        con.commit()
+        hg="select quotationid from vendorgivequotation where qid='"+str(id)+"'"
+        c.execute(hg)
+        gp=c.fetchone()
+        quoid=gp[0]
+        lp1="update  adminquotation set status='"+str(st)+"' where qid='"+str(quoid)+"'"
+        c.execute(lp1)
+        con.commit()
+        print(lp)
+      #  n="insert into delivery values('"+str(cno)+"','"+str(name)+"','"+str(address)+"','"+str(email)+"','"+str(phno)+"','"+str(amount)+"')"
+       
+       # c.execute(n)
+      #  con.commit()
+        return HttpResponseRedirect("/payment3")
+    return render(request,"payment2.html",{"cno":cno,"amount":amount})
+
+def payment3(request):
+    return render(request,"payment3.html")
+
+def payment4(request):
+    return render(request,"payment4.html")
+
+def payment5(request):
+  #  cno=request.session["card_no"]
+    today = date.today()
+   # n="select * from delivery where card='"+str(cno)+"'"
+    #c.execute(n)
+    #data=c.fetchall()
+    return render(request,"payment5.html",{"today":today})
+# Create your views here.
+def addstudymaterial(request):
+    if request.POST:
+        sub = request.POST.get("sub")
+        uploaded_file_url=""
+        if request.FILES.get("f1"):
+            
+            myfile=request.FILES.get("f1")
+            fs=FileSystemStorage()
+            filename=fs.save(myfile.name , myfile)
+            uploaded_file_url = fs.url(filename)
+            t="insert into studymaterial(sub,doc) values('"+str(sub)+"','"+str(uploaded_file_url)+"')"
+            c.execute(t)
+            con.commit()
+    return render(request,"addstudymaterial.html")
+def viewmaterial(request):
+    if request.POST:
+        sub=request.POST.get("t1")
+        c.execute("SELECT * from `studymaterial` where sub='"+str(sub)+"'")
+        data=c.fetchall()    
+        return render(request,'dwnldmaterial.html',{'data':data})
+    return render(request,"dwnldmaterial.html")
+
